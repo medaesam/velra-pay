@@ -1,0 +1,2 @@
+{ "name": "velra-pay", "version": "1.0.0", "private": true, "description": "Auto-verifies Vodafone Cash and InstaPay transfers against pending Shopify orders",
+  "main": "server.js", "engines": { "node": ">=18" }, "scripts": { "start": "node server.js", "test": "node test.js" } }
