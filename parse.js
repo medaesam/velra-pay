@@ -7,9 +7,11 @@ function parseSms(raw) {
   const text = toLatin(raw).replace(/\s+/g, ' ').trim();
 
   // Vodafone Cash: "تم استلام مبلغ 1300 جنيه من رقم 01012225436 المسجل بإسم Mahmoud H Elsaid على رقم محفظتك ... رقم العملية: 019629516471"
-  let m = text.match(/استلام مبلغ ([\d.,]+) ?جنيه من رقم (\+?\d{10,13}) (?:المسجل باسم|المسجل بإسم) (.+?) على رقم محفظتك/);
+  // also: "تم استلام مبلغ 1.00 جنيه من 01090119869؛ المسجل بإسم MOHAMED ESAM على رقم محفظتك 0109... بتاريخ 10-11-26 07:22"
+  let m = text.match(/استلام مبلغ ([\d.,]+)\s*جنيه\s+من\s+(?:رقم\s+)?(\+?\d{10,13})\s*[؛;:،,]?\s*المسجل\s+ب[اإ]سم\s+(.+?)\s+على رقم محفظتك/);
   if (m) {
-    const ref = (text.match(/رقم العملية:? ?(\d{6,})/) || [])[1] || null;
+    let ref = (text.match(/رقم العملية:? ?(\d{6,})/) || [])[1] || null;
+    if (!ref) { const dt = text.match(/بتاريخ\s+(\d{1,2})-(\d{1,2})-(\d{2,4})\s+(\d{1,2}):(\d{2})/); if (dt) ref = 'vf' + dt.slice(1).join('') + m[2].slice(-4) + String(m[1]).replace(/\D/g, ''); }
     return { kind: 'wallet', provider: 'Vodafone Cash', amount: num(m[1]), phone: m[2], name: m[3].trim(), ref };
   }
 
