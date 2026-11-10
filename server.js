@@ -25,7 +25,9 @@ const CID = clean(SHOPIFY_CLIENT_ID), CSECRET = clean(SHOPIFY_CLIENT_SECRET), KE
 function why(e) { const c = e && e.cause; return (e.message || String(e)) + (c ? ' [' + (c.code || '') + ' ' + (c.hostname || c.message || '') + ']' : ''); }
 
 const money = n => `${Number(n).toLocaleString('en-US')} ج`;
-const seen = new Set();          // refs handled since boot (tags on the order are the durable record)
+const seen = new Set();
+const recent = [];   // last requests (time, what arrived, result) for /last. No balances are kept.
+function remember(e) { recent.unshift({ at: new Date().toISOString(), ...e }); recent.length = Math.min(recent.length, 15); }          // refs handled since boot (tags on the order are the durable record)
 
 /* ---------- Shopify ---------- */
 let token = SHOPIFY_ADMIN_TOKEN || null, tokenExp = SHOPIFY_ADMIN_TOKEN ? Infinity : 0;
@@ -111,16 +113,24 @@ const server = http.createServer(async (req, res) => {
   const asText = (req.url || '').includes('format=text');
   const send = (code, body) => { if (asText) { res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end(body.msg || (body.ok ? 'ok' : 'error')); } res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)); };
   if (req.method === 'GET' && req.url === '/health') return send(200, { ok: true, shop: SHOP_HOST, api: APIV, dryRun: DRY_RUN === 'true' });
+  if (req.method === 'GET' && req.url.startsWith('/last')) {
+    const k = new URL(req.url, 'http://x').searchParams.get('key');
+    if (!KEY || clean(k) !== KEY) return send(401, { ok: false, msg: 'unauthorized' });
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: true, recent }, null, 2));
+  }
   if (req.method !== 'POST' || !req.url.startsWith('/sms')) return send(404, { ok: false });
-  if (!KEY || clean(req.headers['x-velra-key']) !== KEY) return send(401, { ok: false, msg: 'unauthorized' });
+  if (!KEY || clean(req.headers['x-velra-key']) !== KEY) { remember({ result: 'unauthorized (wrong or missing X-Velra-Key)' }); return send(401, { ok: false, msg: 'unauthorized' }); }
   let body = ''; req.on('data', c => { body += c; if (body.length > 20000) req.destroy(); });
   req.on('end', async () => {
     try {
-      let text = body; try { const j = JSON.parse(body); text = j.text || j.message || body; } catch (e) {}
+      let text = body;
+      try { const j = JSON.parse(body); let v = j.text ?? j.message ?? j.content ?? j; if (v && typeof v === 'object') v = v.content || v.body || v.text || JSON.stringify(v); text = String(v ?? ''); }
+      catch (e) { if (/^(text|message)=/.test(body)) { try { text = new URLSearchParams(body).get('text') || new URLSearchParams(body).get('message') || body; } catch (x) {} } }
       const out = await handle(text);
-      console.log(new Date().toISOString(), out.msg);          // the raw SMS (with your balance) is never logged
+      console.log(new Date().toISOString(), out.msg);
+      remember({ bytes: body.length, kind: (parseSms(text) || {}).kind || null, preview: text.replace(/رصيدك[^\n]*/g, '').slice(0, 70), result: out.msg });          // the raw SMS (with your balance) is never logged
       send(200, out);
-    } catch (e) { console.error(e); send(500, { ok: false, msg: '❌ حصلت مشكلة: ' + why(e).slice(0, 200) + ' · shop=' + SHOP_HOST }); }
+    } catch (e) { console.error(e); remember({ bytes: body.length, error: why(e).slice(0, 160) }); send(500, { ok: false, msg: '❌ حصلت مشكلة: ' + why(e).slice(0, 200) + ' · shop=' + SHOP_HOST }); }
   });
 });
 if (require.main === module) server.listen(PORT, () => console.log('velra-pay listening on', PORT));
