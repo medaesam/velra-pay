@@ -14,8 +14,15 @@ const {
   METHOD_MATCH = 'instapay|vodafone|wallet|محفظة|انستاباي|إنستاباي',  // manual payment method name
   WINDOW_HOURS = '48',
   AUTO_UNIQUE_AMOUNT = 'true',  // InstaPay: auto-mark when only one order has that amount
-  DRY_RUN = 'false',
+  DRY_RUN: DRY_RAW = 'false',
 } = process.env;
+const DRY_RUN = String(DRY_RAW).trim().replace(/^DRY_RUN=/, '');
+
+// tolerate stray spaces, a pasted "SHOP=" prefix, https:// or a trailing slash in the Railway variables
+const clean = v => String(v || '').trim().replace(/^[A-Z_]+=/, '').trim();
+const SHOP_HOST = clean(SHOP).replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+const CID = clean(SHOPIFY_CLIENT_ID), CSECRET = clean(SHOPIFY_CLIENT_SECRET), KEY = clean(SECRET), APIV = clean(API_VERSION) || '2026-10';
+function why(e) { const c = e && e.cause; return (e.message || String(e)) + (c ? ' [' + (c.code || '') + ' ' + (c.hostname || c.message || '') + ']' : ''); }
 
 const money = n => `${Number(n).toLocaleString('en-US')} ج`;
 const seen = new Set();          // refs handled since boot (tags on the order are the durable record)
@@ -24,9 +31,9 @@ const seen = new Set();          // refs handled since boot (tags on the order a
 let token = SHOPIFY_ADMIN_TOKEN || null, tokenExp = SHOPIFY_ADMIN_TOKEN ? Infinity : 0;
 async function getToken() {
   if (token && Date.now() < tokenExp) return token;
-  const r = await fetch(`https://${SHOP}/admin/oauth/access_token`, {
+  const r = await fetch(`https://${SHOP_HOST}/admin/oauth/access_token`, {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: SHOPIFY_CLIENT_ID, client_secret: SHOPIFY_CLIENT_SECRET }),
+    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: CID, client_secret: CSECRET }),
   });
   if (!r.ok) throw new Error('token ' + r.status + ' ' + (await r.text()).slice(0, 200));
   const j = await r.json();
@@ -34,7 +41,7 @@ async function getToken() {
   return token;
 }
 async function gql(query, variables) {
-  const r = await fetch(`https://${SHOP}/admin/api/${API_VERSION}/graphql.json`, {
+  const r = await fetch(`https://${SHOP_HOST}/admin/api/${APIV}/graphql.json`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': await getToken() },
     body: JSON.stringify({ query, variables }),
   });
@@ -103,9 +110,9 @@ async function handle(text) {
 const server = http.createServer(async (req, res) => {
   const asText = (req.url || '').includes('format=text');
   const send = (code, body) => { if (asText) { res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end(body.msg || (body.ok ? 'ok' : 'error')); } res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)); };
-  if (req.method === 'GET' && req.url === '/health') return send(200, { ok: true });
+  if (req.method === 'GET' && req.url === '/health') return send(200, { ok: true, shop: SHOP_HOST, api: APIV, dryRun: DRY_RUN === 'true' });
   if (req.method !== 'POST' || !req.url.startsWith('/sms')) return send(404, { ok: false });
-  if (!SECRET || req.headers['x-velra-key'] !== SECRET) return send(401, { ok: false, msg: 'unauthorized' });
+  if (!KEY || clean(req.headers['x-velra-key']) !== KEY) return send(401, { ok: false, msg: 'unauthorized' });
   let body = ''; req.on('data', c => { body += c; if (body.length > 20000) req.destroy(); });
   req.on('end', async () => {
     try {
@@ -113,7 +120,7 @@ const server = http.createServer(async (req, res) => {
       const out = await handle(text);
       console.log(new Date().toISOString(), out.msg);          // the raw SMS (with your balance) is never logged
       send(200, out);
-    } catch (e) { console.error(e); send(500, { ok: false, msg: '❌ حصلت مشكلة: ' + e.message.slice(0, 120) }); }
+    } catch (e) { console.error(e); send(500, { ok: false, msg: '❌ حصلت مشكلة: ' + why(e).slice(0, 200) + ' · shop=' + SHOP_HOST }); }
   });
 });
 if (require.main === module) server.listen(PORT, () => console.log('velra-pay listening on', PORT));
