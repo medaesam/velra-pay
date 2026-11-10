@@ -112,6 +112,7 @@ async function handle(text) {
 const server = http.createServer(async (req, res) => {
   const asText = (req.url || '').includes('format=text');
   const send = (code, body) => { if (asText) { res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end(body.msg || (body.ok ? 'ok' : 'error')); } res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(body)); };
+  if (!/^\/(health|last)/.test(req.url || '')) remember({ hit: req.method + ' ' + (req.url || '').slice(0, 60), client: String(req.headers['user-agent'] || '').slice(0, 60), type: String(req.headers['content-type'] || ''), len: req.headers['content-length'] || null, hasKey: !!req.headers['x-velra-key'] });
   if (req.method === 'GET' && req.url === '/health') return send(200, { ok: true, shop: SHOP_HOST, api: APIV, dryRun: DRY_RUN === 'true' });
   if (req.method === 'GET' && req.url.startsWith('/last')) {
     const k = new URL(req.url, 'http://x').searchParams.get('key');
