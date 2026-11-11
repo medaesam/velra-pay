@@ -1,8 +1,8 @@
 <!doctype html><meta charset="utf-8"><title>bridge</title><body>sending…<script>
-(async()=>{const o=window.opener;if(!o){document.body.textContent='no opener';return}
+(async()=>{const o=window.opener||(window.parent!==window?window.parent:null);if(!o){document.body.textContent='no opener';return}
 for(let i=1;i<=27;i++){const n=String(i).padStart(2,'0');
 const b=await fetch('https://raw.githubusercontent.com/medaesam/velra-pay/ig-assets/'+n+'.png').then(r=>r.blob());
 const bm=await createImageBitmap(b);const c=document.createElement('canvas');c.width=1080;c.height=1350;const x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(bm,0,0,1080,1350);
 const j=await new Promise(r=>c.toBlob(r,'image/jpeg',0.92));o.postMessage({velra:n,buf:await j.arrayBuffer()},'*');}
-o.postMessage({velra:'done'},'*');setTimeout(()=>window.close(),500)})();
+o.postMessage({velra:'done'},'*');document.body.textContent="sent"})();
 </script>
