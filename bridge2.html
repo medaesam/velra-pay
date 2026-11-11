@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>b2</title><body>idle<script>
+const BASE='https://raw.githubusercontent.com/medaesam/velra-pay/ig-assets/st/';
+window.addEventListener('message',async e=>{
+  const names=e.data&&e.data.want;if(!Array.isArray(names))return;
+  const o=window.parent;
+  for(const n of names){
+    try{const b=await fetch(BASE+n).then(r=>r.arrayBuffer());
+    o.postMessage({velra2:n,buf:b},'*',[b]);}
+    catch(err){o.postMessage({velra2:n,err:String(err)},'*')}
+  }
+  o.postMessage({velra2:'__done'},'*');document.body.textContent='sent';
+});
+window.parent.postMessage({velra2:'__ready'},'*');
+document.body.textContent='ready';
+</script>
