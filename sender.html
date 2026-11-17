@@ -7,21 +7,17 @@
   const s = document.getElementById('s');
   const q = new URLSearchParams(location.search);
   const files = (q.get('f') || '').split(',').filter(Boolean);
+  const target = q.get('t');
   const base = 'https://raw.githubusercontent.com/medaesam/velra-pay/velra-ig-stories-v1/';
   const out = [];
   for (const f of files) {
-    const r = await fetch(base + f);
-    const b = await r.blob();
-    out.push({ name: f.split('/').pop(), blob: b });
+    const b = await (await fetch(base + f)).blob();
+    const b64 = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.readAsDataURL(b); });
+    out.push([f.split('/').pop(), b64]);
   }
-  s.textContent = 'Fetched ' + out.length + ' files, sending…';
-  let acked = false;
-  window.addEventListener('message', e => { if (e.data === 'velra-ack') { acked = true; s.textContent = 'Sent ' + out.length + ' files.'; } });
-  for (let i = 0; i < 40 && !acked; i++) {
-    if (window.opener) window.opener.postMessage({ velra: true, files: out }, '*');
-    await new Promise(r => setTimeout(r, 500));
-  }
-  if (!acked) s.textContent = 'No ack (opener: ' + !!window.opener + ')';
+  const payload = encodeURIComponent(JSON.stringify(out));
+  s.textContent = 'Fetched ' + out.length + ' files (' + payload.length + ' chars). Redirecting…';
+  if (target) location.href = target + '#velra=' + payload;
 })();
 </script>
 </body></html>
