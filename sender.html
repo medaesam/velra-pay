@@ -1,0 +1,27 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>VELRA sender</title></head>
+<body style="font-family:sans-serif;padding:24px">
+<p id="s">Loading…</p>
+<script>
+(async () => {
+  const s = document.getElementById('s');
+  const q = new URLSearchParams(location.search);
+  const files = (q.get('f') || '').split(',').filter(Boolean);
+  const base = 'https://raw.githubusercontent.com/medaesam/velra-pay/velra-ig-stories-v1/';
+  const out = [];
+  for (const f of files) {
+    const r = await fetch(base + f);
+    const b = await r.blob();
+    out.push({ name: f.split('/').pop(), blob: b });
+  }
+  s.textContent = 'Fetched ' + out.length + ' files, sending…';
+  let acked = false;
+  window.addEventListener('message', e => { if (e.data === 'velra-ack') { acked = true; s.textContent = 'Sent ' + out.length + ' files.'; } });
+  for (let i = 0; i < 40 && !acked; i++) {
+    if (window.opener) window.opener.postMessage({ velra: true, files: out }, '*');
+    await new Promise(r => setTimeout(r, 500));
+  }
+  if (!acked) s.textContent = 'No ack (opener: ' + !!window.opener + ')';
+})();
+</script>
+</body></html>
